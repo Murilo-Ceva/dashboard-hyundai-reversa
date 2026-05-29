@@ -3,7 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="icon" href="data:,">
 <title>CEVA Control Tower — Reversa Hyundai</title>
 <style>
 :root{--uiZoom:.90;--bg:#f4f7fb;--side:#fff;--card:#fff;--card2:#eef3fa;--line:#d9e2ef;--text:#101828;--muted:#667085;--blue:#0f55b8;--red:#ef3340;--green:#22c55e;--yellow:#f59e0b;--cyan:#08b6c9;--shadow:0 8px 22px rgba(15,23,42,.08)}
@@ -306,49 +305,31 @@ const FLUXO_OPERACIONAL=[
   {n:13,t:'NFD Lançada',r:'Anthony Machado',keys:['NFD LANCADA'],a:'Lançar NFD e finalizar o fluxo operacional.',c:'#22c55e'}
 ];
 function ownerFromStatus(statusAuto){let resp=fluxoResponsavelPorStatus(statusAuto),k=key(resp);if(k.includes('SAC'))return'SAC';if(k.includes('VITORIA'))return'Vitoria';if(k.includes('ANTHONY'))return'Anthony';if(k.includes('RONALDO'))return'Ronaldo';if(k.includes('PAULO'))return'Paulo';return'Controle'}
-function fluxoMatchRows(f){return FILTERED.filter(r=>f.keys.some(x=>key(r.statusAuto).includes(x)))}
-function fluxoResponsavelPorStatus(statusAuto){let k=key(statusAuto);for(const f of FLUXO_OPERACIONAL){if(f.keys.some(x=>k.includes(x)))return f.r}return (MAP[statusAuto]&&MAP[statusAuto][1])||'Controle'}
-function fluxoAcaoPorStatus(statusAuto){let k=key(statusAuto);for(const f of FLUXO_OPERACIONAL){if(f.keys.some(x=>k.includes(x)))return f.a}return (MAP[statusAuto]&&MAP[statusAuto][0])||'Analisar próxima ação'}function isConcluido(r){return String(r.statusSla).includes('Concluído')}function isForaPrazoAberto(r){return !isConcluido(r)&&String(r.statusSla).includes('Fora do Prazo')}function isNoPrazoAberto(r){return !isConcluido(r)&&r.statusSla==='✔ No Prazo'}function isAbertoFluxo(r){return !isConcluido(r)}
+function flowMatchStatus(statusAuto,f){
+ const st=key(statusAuto||'');
+ return f.keys.some(x=>st.includes(key(x)));
+}
+function fluxoMatchRows(f){return FILTERED.filter(r=>flowMatchStatus(r.statusAuto,f))}
+function fluxoResponsavelPorStatus(statusAuto){for(const f of FLUXO_OPERACIONAL){if(flowMatchStatus(statusAuto,f))return f.r}return (MAP[statusAuto]&&MAP[statusAuto][1])||'Controle'}
+function fluxoAcaoPorStatus(statusAuto){for(const f of FLUXO_OPERACIONAL){if(flowMatchStatus(statusAuto,f))return f.a}return (MAP[statusAuto]&&MAP[statusAuto][0])||'Analisar próxima ação'}
+function isConcluido(r){return String(r.statusSla).includes('Concluído')}function isForaPrazoAberto(r){return !isConcluido(r)&&String(r.statusSla).includes('Fora do Prazo')}function isNoPrazoAberto(r){return !isConcluido(r)&&r.statusSla==='✔ No Prazo'}function isAbertoFluxo(r){return !isConcluido(r)}
 function fluxoCard(f){let rows=fluxoMatchRows(f),ab=rows.filter(isAbertoFluxo),no=rows.filter(isNoPrazoAberto).length,fora=rows.filter(isForaPrazoAberto).length,conc=rows.filter(isConcluido).length,total=rows.length,pctConc=total?pct(conc/total*100):'0,0%';return `<div class="flowStep" style="--flowColor:${f.c}"><div class="flowNum">${f.n}</div><div><div class="flowTitle">${esc(f.t)}</div><div class="flowResp">Owner: <b>${esc(f.r)}</b></div></div><div class="flowAction"><b>Ação esperada:</b> ${esc(f.a)}</div><div class="flowMetric"><b>${fmt(ab.length)}</b><span>em aberto</span></div><div class="flowMetric green"><b>${fmt(no)}</b><span>no prazo</span></div><div class="flowMetric red"><b>${fmt(fora)}</b><span>fora prazo</span></div><div class="flowMetric green"><b>${fmt(conc)}</b><span>concluídos</span></div><div class="flowMetric green"><b>${pctConc}</b><span>% concluído</span></div></div>`}
 function fluxoTop15(rows){let top=rows.filter(isAbertoFluxo).sort((a,b)=>(Number(b.diasSem)||0)-(Number(a.diasSem)||0)).slice(0,15);return `<div class="card"><div class="hd">📌 <b>Top 15 para cobrar hoje</b></div><div class="flowTable"><table><thead><tr><th>#</th><th>Processo</th><th>Dealer</th><th>TSP</th><th>Etapa atual</th><th>Responsável</th><th>Dias</th><th>Ação</th></tr></thead><tbody>${top.map((r,i)=>`<tr><td>${i+1}</td><td><b>${esc(r.processo)}</b></td><td>${esc(r.dealer)}</td><td>${esc(r.tsp)}</td><td>${esc(r.statusAuto)}</td><td><b>${esc(fluxoResponsavelPorStatus(r.statusAuto))}</b></td><td><b>${fmt(r.diasSem)}</b></td><td>${esc(fluxoAcaoPorStatus(r.statusAuto))}</td></tr>`).join('')}</tbody></table></div><div class="flowNote">Lista ordenada por maior número de dias sem atualização.</div></div>`}
 function fluxo(){let ab=FILTERED.filter(isAbertoFluxo),no=ab.filter(isNoPrazoAberto).length,fora=ab.filter(isForaPrazoAberto).length,conc=FILTERED.filter(isConcluido).length,total=FILTERED.length,pctConc=total?pct(conc/total*100):'0,0%',maxAberto=Math.max(0,...ab.map(r=>Number(r.diasSem)||0));$('page').innerHTML=`<div class="flowHero"><h2>Fluxo Operacional da Reversa</h2><p>Localizar <b>onde o processo está parado</b>, quem é o <b>owner</b>, quantos estão <b>fora do prazo</b> e o que já foi <b>concluído</b>.</p></div>`+`<div class="kpis">${kpi('Pendentes',fmt(ab.length),'processos ainda em aberto','blue','📋')}${kpi('No Prazo',fmt(no),'pendentes dentro do SLA','green','✔')}${kpi('Fora do Prazo',fmt(fora),ab.length?pct(fora/ab.length*100)+' dos pendentes':'0,0% dos pendentes','red','⚠')}${kpi('Concluídos',fmt(conc),'processos finalizados','green','✅')}${kpi('% Concluído',pctConc,'concluídos sobre o total','green','🎯')}</div>`+`<div class="flowWrap">${FLUXO_OPERACIONAL.map(fluxoCard).join('')}</div>`+`<div class="flowTables"><div class="card"><div class="hd">🧭 <b>Resumo por etapa operacional</b></div><div class="flowTable"><table><thead><tr><th>#</th><th>Etapa</th><th>Owner</th><th>Pendente</th><th>No prazo</th><th>Fora prazo</th><th>Concluídos</th><th>% concluído</th><th>+7 dias</th></tr></thead><tbody>${FLUXO_OPERACIONAL.map(f=>{let rr=fluxoMatchRows(f),ab=rr.filter(isAbertoFluxo),no=rr.filter(isNoPrazoAberto).length,fora=rr.filter(isForaPrazoAberto).length,conc=rr.filter(isConcluido).length,pctEtapa=rr.length?pct(conc/rr.length*100):'0,0%',par=ab.filter(r=>Number(r.diasSem)>7).length;return `<tr><td>${f.n}</td><td><b>${esc(f.t)}</b></td><td>${esc(f.r)}</td><td>${fmt(ab.length)}</td><td>${fmt(no)}</td><td>${fmt(fora)}</td><td>${fmt(conc)}</td><td><b>${pctEtapa}</b></td><td>${fmt(par)}</td></tr>`}).join('')}</tbody></table></div></div><div class="card"><div class="hd">👤 <b>Cobrança por owner</b></div>${bars(agg(ab,r=>r.owner).slice(0,8),'#0f55b8')}<div class="flowNote">Cobrança considera apenas pendências abertas. Use o filtro <b>Owner</b> para isolar SAC, Vitoria, Anthony, Ronaldo ou Paulo.</div></div></div>`+fluxoTop15(FILTERED)+detail('Detalhamento — Fluxo Operacional / pendências abertas',ab)}
 function overview(){let pend=FILTERED.filter(r=>!isConcluido(r)),conc=FILTERED.filter(isConcluido).length,concFora=FILTERED.filter(r=>r.statusSla==='⚠ Concluído Fora do Prazo').length;$('page').innerHTML=headKpis()+`<div class="grid2"><div class="card"><div class="hd">📈 <b>Evolução mensal</b> <span style="text-transform:none;color:var(--muted);font-size:11px">pendentes por Dt Reclamação</span></div>${monthTrend(pend)}</div>${painelCobranca(FILTERED)}</div><div class="grid2"><div class="card"><div class="hd">🚚 <b>Transportadoras</b></div>${bars(agg(pend,r=>r.tsp).slice(0,10),'#08b6c9')}</div><div class="card"><div class="hd">🎯 <b>Resumo clean</b></div>${bars([{k:'Pendentes',q:pend.length},{k:'No prazo',q:pend.filter(isNoPrazoAberto).length},{k:'Fora do prazo',q:pend.filter(isForaPrazoAberto).length},{k:'Concluídos',q:conc},{k:'Concluído fora do prazo',q:concFora}],'#0f55b8')}</div></div>`+detail('Detalhamento — Visão Geral',FILTERED)}
 function gargalos(){let g=agg(FILTERED,r=>r.statusAuto);$('page').innerHTML=headKpis()+`<div class="grid2"><div class="card"><div class="hd">🧩 <b>Quantidade por etapa</b></div>${bars(g,'#0f55b8')}</div><div class="card"><div class="hd">⚠ <b>Fora do prazo por etapa</b></div>${bars([...g].sort((a,b)=>b.fora-a.fora).map(x=>({k:x.k,q:x.fora})),'#ef3340')}</div></div><div class="card"><div class="hd">📋 <b>Matriz de gargalos</b></div><div class="tableWrap"><table><thead><tr><th>Status</th><th>Qtd</th><th>Fora Prazo</th><th>Parados +7</th><th>Responsável</th><th>Próxima ação</th></tr></thead><tbody>${g.map(x=>{let st=MAP[x.k]||['Analisar','Controle'];return`<tr><td><b>${esc(x.k)}</b></td><td>${fmt(x.q)}</td><td>${fmt(x.fora)}</td><td>${fmt(x.parado)}</td><td>${esc(st[1])}</td><td>${esc(st[0])}</td></tr>`}).join('')}</tbody></table></div></div>`+detail('Detalhamento — Gargalos',FILTERED)}function resp(){let rows=FILTERED.filter(r=>!String(r.statusSla).includes('Concluído')),a=agg(rows,r=>r.responsavel);$('page').innerHTML=headKpis(rows)+`<div class="grid2"><div class="card"><div class="hd">👤 <b>Pendências por responsável</b></div>${bars(a,'#0f55b8')}</div><div class="card"><div class="hd">🔴 <b>Parados +7 por responsável</b></div>${bars(a.map(x=>({k:x.k,q:x.parado})).sort((a,b)=>b.q-a.q),'#ef3340')}</div></div>`+detail('Detalhamento — Responsáveis',rows)}function render(){if(!DATA.length)return;if(CURRENT==='aging')CURRENT='overview';$('pageTitle').textContent={overview:'Visão Geral',fluxo:'Fluxo Operacional'}[CURRENT]||'Visão Geral';({overview,fluxo}[CURRENT]||overview)()}document.querySelectorAll('.nav button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));b.classList.add('active');CURRENT=b.dataset.page;DETAIL_PAGE=1;render()});['q','fMonth','fOwner','fTsp','fUf','fCity','fStatus'].forEach(id=>$(id).addEventListener(id==='q'?'input':'change',applyFilters));$('clear').onclick=()=>{['q','fMonth','fOwner','fTsp','fUf','fCity','fStatus'].forEach(id=>$(id).value='');applyFilters()};$('theme').onclick=()=>{document.body.classList.toggle('dark');localStorage.setItem('revDark',document.body.classList.contains('dark')?'1':'0');$('theme').textContent=document.body.classList.contains('dark')?'🌙':'☀️'};$('hamb').onclick=()=>{
   if(innerWidth<760){$('side').classList.toggle('open')}else{document.body.classList.toggle('menu-collapsed');localStorage.setItem('revMenuCollapsed',document.body.classList.contains('menu-collapsed')?'1':'0')}
-};window.addEventListener('resize',()=>{if(innerWidth>=760)$('side').classList.remove('open')});$('csvFile').onchange=e=>{let f=e.target.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>hydrate(decodeSmart(rd.result),f.lastModified);rd.onerror=()=>toast('Erro ao abrir arquivo CSV.');rd.readAsArrayBuffer(f)};function stamp(ts,label){
- if(!ts){$('updated').textContent=label||'🕘 Base carregando...';return}
- let d=new Date(ts);
- if(isNaN(d)){$('updated').textContent=label||'🕘 Base carregada';return}
- $('updated').textContent='🕘 Base CSV: '+d.toLocaleDateString('pt-BR')+' '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})
-}
-async function autoLoad(){
- $('updated').textContent='🕘 Carregando CSV...';
- document.body.classList.remove('dark');$('theme').textContent='☀️';localStorage.setItem('revDark','0');
+};window.addEventListener('resize',()=>{if(innerWidth>=760)$('side').classList.remove('open')});$('csvFile').onchange=e=>{let f=e.target.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>hydrate(decodeSmart(rd.result),f.lastModified);rd.onerror=()=>toast('Erro ao abrir arquivo CSV.');rd.readAsArrayBuffer(f)};function stamp(ts){let d=ts?new Date(ts):new Date();$('updated').textContent='🕘 Atualizado às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+', '+d.toLocaleDateString('pt-BR')}async function autoLoad(){
+ stamp();document.body.classList.remove('dark');$('theme').textContent='☀️';localStorage.setItem('revDark','0');
  if(localStorage.getItem('revMenuCollapsed')==='1'&&innerWidth>=760){document.body.classList.add('menu-collapsed')}
- const paths=['base_reversa_hyundai.csv','./base_reversa_hyundai.csv'];
- const attempts=[];
+ const paths=['data/base_reversa_hyundai.csv','base_reversa_hyundai.csv','./data/base_reversa_hyundai.csv','./base_reversa_hyundai.csv','base.csv','data.csv'];
  if(location.protocol!=='file:'){
-  for(const p of paths){
-   try{
-    const url=new URL(p, location.href);
-    url.searchParams.set('v', String(Date.now()));
-    let r=await fetch(url.toString(),{cache:'no-store'});
-    attempts.push(p+' → '+r.status);
-    if(r.ok){
-     let lm=r.headers.get('last-modified');
-     hydrate(decodeSmart(await r.arrayBuffer()),lm?Date.parse(lm):null);
-     toast('Base carregada: '+p);
-     return
-    }
-   }catch(e){attempts.push(p+' → erro')}
-  }
+  for(const p of paths){try{let r=await fetch(p,{cache:'no-store'});if(r.ok){let lm=r.headers.get('last-modified');hydrate(decodeSmart(await r.arrayBuffer()),lm?Date.parse(lm):null);return}}catch(e){}}
  }
- $('updated').textContent='🕘 CSV não carregado';
- $('page').innerHTML='<div class="card"><div class="hd">📁 <b>CSV não carregou automaticamente</b></div><div class="flowNote">No GitHub Pages, o arquivo precisa estar na mesma pasta do <b>index.html</b> com o nome exato <b>base_reversa_hyundai.csv</b>.<br><br><b>Tentativas:</b><br>'+esc(attempts.join(' | ')||'Execução local/file://')+'<br><br>Alternativa: clique em <b>⬆ Importar CSV</b> e selecione o arquivo.</div></div>';
- toast('CSV não encontrado. Verifique o nome e a pasta.');
+ $('page').innerHTML='<div class="card"><div class="hd">📁 <b>Importe o CSV</b></div><div class="flowNote">Não consegui carregar automaticamente. Clique em <b>⬆ Importar CSV</b> e selecione <b>base_reversa_hyundai.csv</b>.<br><br>Se estiver no GitHub Pages, coloque o CSV junto do HTML como <b>base_reversa_hyundai.csv</b> ou em <b>data/base_reversa_hyundai.csv</b>.</div></div>';
+ toast('Importe o CSV manualmente ou publique junto do HTML.');
 }
 
-// Inicializa carregamento automático da base no GitHub Pages
 autoLoad();
 </script>
 </body></html>
