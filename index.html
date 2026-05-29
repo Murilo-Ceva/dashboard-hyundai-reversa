@@ -317,26 +317,15 @@ function gargalos(){let g=agg(FILTERED,r=>r.statusAuto);$('page').innerHTML=head
 };window.addEventListener('resize',()=>{if(innerWidth>=760)$('side').classList.remove('open')});$('csvFile').onchange=e=>{let f=e.target.files[0];if(!f)return;let rd=new FileReader();rd.onload=()=>hydrate(decodeSmart(rd.result),f.lastModified);rd.onerror=()=>toast('Erro ao abrir arquivo CSV.');rd.readAsArrayBuffer(f)};function stamp(ts){let d=ts?new Date(ts):new Date();$('updated').textContent='🕘 Atualizado às '+d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+', '+d.toLocaleDateString('pt-BR')}async function autoLoad(){
  stamp();document.body.classList.remove('dark');$('theme').textContent='☀️';localStorage.setItem('revDark','0');
  if(localStorage.getItem('revMenuCollapsed')==='1'&&innerWidth>=760){document.body.classList.add('menu-collapsed')}
- const paths=['base_reversa_hyundai.csv','./base_reversa_hyundai.csv','data/base_reversa_hyundai.csv','./data/base_reversa_hyundai.csv','base.csv','data.csv'];
- const attempts=[];
+ const paths=['data/base_reversa_hyundai.csv','base_reversa_hyundai.csv','./data/base_reversa_hyundai.csv','./base_reversa_hyundai.csv','base.csv','data.csv'];
  if(location.protocol!=='file:'){
-  for(const p of paths){
-   try{
-    const url=new URL(p, location.href);
-    url.searchParams.set('v', String(Date.now()));
-    let r=await fetch(url.toString(),{cache:'no-store'});
-    attempts.push(p+' → '+r.status);
-    if(r.ok){
-     let lm=r.headers.get('last-modified');
-     hydrate(decodeSmart(await r.arrayBuffer()),lm?Date.parse(lm):null);
-     toast('Base carregada: '+p);
-     return
-    }
-   }catch(e){attempts.push(p+' → erro')}
-  }
+  for(const p of paths){try{let r=await fetch(p,{cache:'no-store'});if(r.ok){let lm=r.headers.get('last-modified');hydrate(decodeSmart(await r.arrayBuffer()),lm?Date.parse(lm):null);return}}catch(e){}}
  }
- $('page').innerHTML='<div class="card"><div class="hd">📁 <b>CSV não carregou automaticamente</b></div><div class="flowNote">No GitHub Pages, envie <b>index.html</b> e <b>base_reversa_hyundai.csv</b> na <b>mesma pasta</b> usada pelo Pages.<br><br><b>Tentativas:</b><br>'+esc(attempts.join(' | ')||'Execução local/file://')+'<br><br>Alternativa: clique em <b>⬆ Importar CSV</b> e selecione o arquivo.</div></div>';
- toast('CSV não encontrado no GitHub Pages. Verifique se o CSV foi publicado junto do index.');
+ $('page').innerHTML='<div class="card"><div class="hd">📁 <b>Importe o CSV</b></div><div class="flowNote">Não consegui carregar automaticamente. Clique em <b>⬆ Importar CSV</b> e selecione <b>base_reversa_hyundai.csv</b>.<br><br>Se estiver no GitHub Pages, coloque o CSV junto do HTML como <b>base_reversa_hyundai.csv</b> ou em <b>data/base_reversa_hyundai.csv</b>.</div></div>';
+ toast('Importe o CSV manualmente ou publique junto do HTML.');
 }
+
+// Inicializa carregamento automático da base no GitHub Pages
+autoLoad();
 </script>
 </body></html>
