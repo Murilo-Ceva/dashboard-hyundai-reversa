@@ -641,7 +641,7 @@ function slaDates(r){return{
  received:rawDate(r,['Recebido Araçariguama (PAULO CRUZ)','Recebido Araçariguama','Recebido Aracariguama'])
 }}
 function deadlineFrom(start,days){return start?new Date(+start+days*DAY_MS):null}
-function pendingSlaRows(rows=FILTERED){return rows.filter(r=>String(r.statusSla||'').includes('Fora do Prazo')&&!String(r.statusSla||'').includes('Concluído'))}
+function pendingSlaRows(rows=FILTERED){return rows.filter(isManagementActive)}
 function hasNfd(d){return !!(d.nfdDate||d.nfdNo)}
 function metricColor(p){return p>=96?'#16a34a':p>=90?'#f59e0b':'#dc2626'}
 function metricLight(p){return p>=96?'🟢':p>=90?'🟡':'🔴'}
