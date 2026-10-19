@@ -1110,4 +1110,63 @@ const th=$('theme');if(th&&!$('btnPres'))th.insertAdjacentHTML('beforebegin','<b
 if(DATA.length)render();
 })();
 </script>
+
+<!-- Correcao final dos cards de pendencias: fonte unica = coluna Status SLA -->
+<script id="fix-cards-status-sla-final-v1">
+(function () {
+  function rawStatusSla(r) {
+    if (!r) return '';
+    const raw = r.raw || {};
+    const value = raw['Status SLA'] || raw['SLA Status'] ||
+      raw['Situação SLA'] || raw['Situacao SLA'] ||
+      raw['Status Prazo'] || r.statusSla || '';
+    return key(value);
+  }
+
+  managementNoPrazo = function (r) {
+    const status = rawStatusSla(r);
+    return status.includes('NO PRAZO') && !status.includes('CONCLUIDO');
+  };
+
+  managementForaPrazo = function (r) {
+    const status = rawStatusSla(r);
+    return status.includes('FORA DO PRAZO') && !status.includes('CONCLUIDO');
+  };
+
+  isManagementActive = function (r) {
+    return managementNoPrazo(r) || managementForaPrazo(r);
+  };
+
+  pendRows = function () {
+    return FILTERED.filter(isManagementActive);
+  };
+
+  pendFarol = function (r) {
+    if (managementNoPrazo(r)) {
+      return {k:'green', n:'No prazo', d:'Conforme Status SLA', c:'#22c55e', o:3};
+    }
+
+    if (managementForaPrazo(r)) {
+      const prazo = r.prazoSla;
+      if (!prazo) {
+        return {k:'black', n:'Fora do prazo', d:'Prazo nao informado', c:'#111827', o:0};
+      }
+
+      const hoje = new Date();
+      hoje.setHours(0,0,0,0);
+      const vencimento = new Date(prazo);
+      vencimento.setHours(0,0,0,0);
+      const dias = Math.abs(businessDaysBetween(hoje, vencimento));
+
+      if (dias <= 10) {
+        return {k:'red', n:'Atrasado ate 10 dias uteis', d:dias+' dias uteis', c:'#ef3340', o:1};
+      }
+      return {k:'black', n:'Atrasado acima de 10 dias uteis', d:dias+' dias uteis', c:'#111827', o:0};
+    }
+
+    return {k:'black', n:'Status nao classificado', d:'Verificar Status SLA', c:'#111827', o:0};
+  };
+})();
+</script>
+
 </body></html>
