@@ -425,9 +425,9 @@ function findHeaderRow(rows){
    r.dtReclamacao=parseDate(pick(o,['Dt Reclamação (SAC)','Dt Reclamação','Data Reclamação','Data Reclamacao','Data','Dt Abertura','Data Abertura','Abertura']));
    r.nfdLancada=parseDate(pick(o,['NFD Lançada (LAISA SILVA)','NFD Lançada','NFD Lancada','Data NFD Lançada','Data NFD Lancada']));
    r.statusAuto=pick(o,['Status Automático','Status Automatico','Status','Etapa','Etapa Atual','Status Atual','Processo Atual','Situação','Situacao'])||'Dt Reclamação';
-   r.prazoSla=parseDate(pick(o,['Prazo SLA','SLA']))||addBusinessDays(r.dtReclamacao,20);
+   r.prazoSla=parseDate(pick(o,['Prazo SLA','SLA']));/* AC = DIATRABALHO(início, D+ da aba Transit Time) */
    let stRaw=pick(o,['Status SLA','SLA Status','Situação SLA','Situacao SLA','Status Prazo']);
-   r.statusSla=normStatus(stRaw)||(r.prazoSla?(r.nfdLancada?(r.nfdLancada>r.prazoSla?'⚠ Concluído Fora do Prazo':'✔ Concluído'):(TODAY>r.prazoSla?'🔴 Pendente Fora do Prazo':'🟢 Pendente no Prazo')):'');
+   r.statusSla=normStatus(stRaw)||(r.prazoSla?((rec=>rec?(rec>r.prazoSla?'⚠ Concluído Fora do Prazo':'✔ Concluído no Prazo'):(TODAY>r.prazoSla?'🔴 Pendente Fora do Prazo':'🟢 Pendente no Prazo'))(parseDate(pick(o,['Recebido Araçariguama (PAULO CRUZ)','Recebido Araçariguama','Recebido Aracariguama'])))):'');
    let ds=pick(o,['Dias sem Atualiz.','Dias sem Atualiz','Dias sem Atualização','Dias sem Atualizacao','Dias sem atualização','Aging','Dias Parado','Dias Pendentes']);
    r.diasSem=r.nfdLancada?'–':(String(ds).trim()?Number(String(ds).replace(/\D+/g,'')):'');
    r.alerta=pick(o,['Alerta']);
@@ -658,7 +658,7 @@ function slaDates(r){return{
  received:rawDate(r,['Recebido Araçariguama (PAULO CRUZ)','Recebido Araçariguama','Recebido Aracariguama'])
 }}
 function deadlineFrom(start,days){return addBusinessDays(start,days)}
-function pendingSlaRows(rows=FILTERED){return rows.filter(r=>isManagementActive(r)&&!isCanceladoExtravio(r))}
+function pendingSlaRows(rows=FILTERED){return rows.filter(isManagementActive)}
 function hasNfd(d){return !!(d.nfdDate||d.nfdNo)}
 function metricColor(p){return p>=96?'#16a34a':p>=90?'#f59e0b':'#dc2626'}
 function metricLight(p){return p>=96?'🟢':p>=90?'🟡':'🔴'}
@@ -669,15 +669,15 @@ function slaCard(id,title,good,total,subtitle,rows){let p=pct1(good,total),color
 let SLA_DETAIL_ROWS={};
 function executiveMetrics(rows=FILTERED){
  let prepared=rows.map(r=>({r,d:slaDates(r)}));
- let otdDone=prepared.filter(x=>!isCanceladoExtravio(x.r)&&x.d.start&&x.d.received),otdGood=otdDone.filter(x=>x.d.received<=deadlineFrom(x.d.start,20));
+ let otdDone=prepared.filter(x=>slaGrupo(x.r)==='CP'||slaGrupo(x.r)==='CF'),otdGood=otdDone.filter(x=>slaGrupo(x.r)==='CP');
  let otpDone=prepared.filter(x=>x.d.scheduled&&x.d.collected),otpGood=otpDone.filter(x=>x.d.collected<=x.d.scheduled);
- let finalDone=prepared.filter(x=>x.d.start&&x.d.scheduled&&x.d.collected&&x.d.collected<=x.d.scheduled&&x.d.received),finalGood=finalDone.filter(x=>x.d.received<=deadlineFrom(x.d.start,20));
- let pending=pendingSlaRows(rows),waiting=pending.filter(r=>{let d=slaDates(r);return hasNfd(d)&&!d.collected}),expired=waiting.filter(r=>{let d=slaDates(r),limit=deadlineFrom(d.start,30);return limit&&TODAY>limit});
+ let finalDone=prepared.filter(x=>(slaGrupo(x.r)==='CP'||slaGrupo(x.r)==='CF')&&x.d.scheduled&&x.d.collected&&x.d.collected<=x.d.scheduled),finalGood=finalDone.filter(x=>slaGrupo(x.r)==='CP');
+ let pending=pendingSlaRows(rows),waiting=pending.filter(r=>{let d=slaDates(r);return hasNfd(d)&&!d.collected}),expired=waiting.filter(managementForaPrazo);
  SLA_DETAIL_ROWS={};
  let cards=slaCard('otd','🚦 OTD PONTUALIDADE',otdGood.length,otdDone.length,'entregues',otdDone.map(x=>x.r))+slaCard('otp','🚦 OTP COLETA',otpGood.length,otpDone.length,'realizadas',otpDone.map(x=>x.r))+slaCard('final','🚦 OTD ENTREGA FINAL',finalGood.length,finalDone.length,'entregues',finalDone.map(x=>x.r));
  SLA_DETAIL_ROWS.waiting=waiting;SLA_DETAIL_ROWS.expired=expired;
  let wp=pct1(waiting.length,pending.length),ep=pct1(expired.length,pending.length);
- return `<section class="slaSection"><div class="slaSectionTitle"><span class="slaMeta">Meta Hyundai: 96%</span></div><div class="slaGrid">${cards}</div></section><section class="alertGrid"><article class="alertExec wait" onclick="openSlaDetail('waiting','📦 NFDs aguardando coleta')"><div class="alertIcon">📦</div><div class="alertText"><div class="alertTitle">NFDs aguardando coleta</div><div class="alertValue">${pctBR(wp)}</div><div class="alertSub"><b>${fmt(waiting.length)}</b> de <b>${fmt(pending.length)}</b> processos pendentes · NFD emitida e sem coleta</div></div><div class="alertArrow">›</div></article><article class="alertExec danger" onclick="openSlaDetail('expired','🚨 NFDs vencidas para transporte')"><div class="alertIcon">🚨</div><div class="alertText"><div class="alertTitle">NFDs vencidas para transporte</div><div class="alertValue">${fmt(expired.length)} casos</div><div class="alertSub">${pctBR(ep)} dos pendentes · mais de 30 dias desde a reclamação</div></div><div class="alertArrow">›</div></article></section>`
+ return `<section class="slaSection"><div class="slaSectionTitle"><span class="slaMeta">Meta Hyundai: 96%</span></div><div class="slaGrid">${cards}</div></section><section class="alertGrid"><article class="alertExec wait" onclick="openSlaDetail('waiting','📦 NFDs aguardando coleta')"><div class="alertIcon">📦</div><div class="alertText"><div class="alertTitle">NFDs aguardando coleta</div><div class="alertValue">${pctBR(wp)}</div><div class="alertSub"><b>${fmt(waiting.length)}</b> de <b>${fmt(pending.length)}</b> processos pendentes · NFD emitida e sem coleta</div></div><div class="alertArrow">›</div></article><article class="alertExec danger" onclick="openSlaDetail('expired','🚨 NFDs vencidas para transporte')"><div class="alertIcon">🚨</div><div class="alertText"><div class="alertTitle">NFDs vencidas para transporte</div><div class="alertValue">${fmt(expired.length)} casos</div><div class="alertSub">${pctBR(ep)} dos pendentes · Prazo SLA (Transit Time) vencido</div></div><div class="alertArrow">›</div></article></section>`
 }
 function openSlaDetail(id,title){let rows=SLA_DETAIL_ROWS[id]||[];VALUE_MODAL_ROWS=rows;VALUE_MODAL_FILTERED=rows;VALUE_MODAL_PAGE=1;VALUE_MODAL_TITLE=title;DETAIL_QUERY='';DETAIL_TSP='';renderValueModal();$('valueModal').classList.add('open');$('valueModal').setAttribute('aria-hidden','false')}
 function detailTransporters(){return [...new Set(VALUE_MODAL_ROWS.map(r=>r.tsp||'Sem cadastro'))].sort((a,b)=>a.localeCompare(b,'pt-BR'))}
@@ -692,13 +692,15 @@ function overview(){$('page').innerHTML=executiveMetrics()+headKpis()+`<div clas
 
 
 // ===== Correções finais: entregas válidas + alertas na página Pendentes =====
-function validDeliveryRows(rows=FILTERED){return rows.filter(r=>{let d=slaDates(r);return d.start&&d.received})}
-function deliveryOnTimeRows(rows=FILTERED){return validDeliveryRows(rows).filter(r=>{let d=slaDates(r);return d.received<=deadlineFrom(d.start,20)})}
-function deliveryLateRows(rows=FILTERED){return validDeliveryRows(rows).filter(r=>{let d=slaDates(r);return d.received>deadlineFrom(d.start,20)})}
+/* Fonte única da regra: Status SLA (coluna AD), que compara Recebido Araçariguama com Prazo SLA (coluna AC, via Transit Time) */
+function slaGrupo(r){const k=key(r&&r.statusSla).replace(/[^A-Z ]/g,'').trim();if(k.includes('CONCLUIDO'))return k.includes('FORA')?'CF':'CP';if(k.includes('PENDENTE')||k.includes('PRAZO'))return k.includes('FORA')?'PF':'PP';return ''}
+function validDeliveryRows(rows=FILTERED){return rows.filter(r=>{const g=slaGrupo(r);return g==='CP'||g==='CF'})}
+function deliveryOnTimeRows(rows=FILTERED){return rows.filter(r=>slaGrupo(r)==='CP')}
+function deliveryLateRows(rows=FILTERED){return rows.filter(r=>slaGrupo(r)==='CF')}
 
 // Os cards e o resumo passam a usar exclusivamente datas válidas de Recebido Araçariguama.
 // Cancelados e extravios permanecem na base detalhada, mas não entram como entrega.
-headKpis=function(rows=FILTERED){let active=rows.filter(isManagementActive),no=active.filter(managementNoPrazo).length,fora=active.filter(managementForaPrazo).length,concPrazo=deliveryOnTimeRows(rows).length,concFora=deliveryLateRows(rows).length,concTotal=concPrazo+concFora,total=rows.length,pctConc=total?pct(concTotal/total*100):'0,0%';return`<div class="kpis">${kpi('Total Processos',fmt(total),'processos no filtro','blue','📦')}${kpi('Entregues no prazo',fmt(concPrazo),'recebido em até 20 dias','green','✅')}${kpi('Entregues fora',fmt(concFora),'recebidos após 20 dias','yellow','⚠')}${kpi('No Prazo',fmt(no),'em acompanhamento no prazo','green','✔')}${kpi('Fora do Prazo',fmt(fora),'em acompanhamento fora do prazo','red','🚨')}${kpi('% Entregues',pctConc,fmt(concTotal)+' entregas válidas','green','🎯')}</div>`}
+headKpis=function(rows=FILTERED){let active=rows.filter(isManagementActive),no=active.filter(managementNoPrazo).length,fora=active.filter(managementForaPrazo).length,concPrazo=deliveryOnTimeRows(rows).length,concFora=deliveryLateRows(rows).length,concTotal=concPrazo+concFora,total=rows.length,pctConc=total?pct(concTotal/total*100):'0,0%';return`<div class="kpis">${kpi('Total Processos',fmt(total),'processos no filtro','blue','📦')}${kpi('Entregues no prazo',fmt(concPrazo),'recebido até o Prazo SLA','green','✅')}${kpi('Entregues fora',fmt(concFora),'recebidos após o Prazo SLA','yellow','⚠')}${kpi('No Prazo',fmt(no),'em acompanhamento no prazo','green','✔')}${kpi('Fora do Prazo',fmt(fora),'em acompanhamento fora do prazo','red','🚨')}${kpi('% Entregues',pctConc,fmt(concTotal)+' entregas válidas','green','🎯')}</div>`}
 
 statusCleanRows=function(type){
  if(type==='total')return FILTERED;
@@ -712,7 +714,7 @@ statusCleanRows=function(type){
 statusCleanTitle=function(type){return({total:'Total de processos',noPrazo:'No prazo (pendentes)',foraPrazo:'Fora do prazo (pendentes)',concluidoPrazo:'Entregues no prazo',concluidoFora:'Entregues fora do prazo',concluidosTotal:'Todas as entregas válidas'}[type]||'Detalhamento')}
 overviewStatusGraph=function(){let total=FILTERED.length,no=statusCleanRows('noPrazo').length,fora=statusCleanRows('foraPrazo').length,conc=statusCleanRows('concluidoPrazo').length,concFora=statusCleanRows('concluidoFora').length,concTotal=conc+concFora,pctEnt=concTotal?pct(conc/concTotal*100):'0,0%',max=Math.max(1,total,no,fora,conc,concFora,concTotal);let row=(type,label,value,display)=>`<div class="row" onclick="showOverviewStatusDetail('${type}')"><div class="lbl">${label}</div><div class="track"><div class="fill" style="width:${Math.max(2,value/max*100)}%"></div></div><div class="num">${display||fmt(value)}</div></div>`;return`<div class="overviewClean">${row('total','Total de processos',total)}${row('noPrazo','No prazo',no)}${row('foraPrazo','Fora do prazo',fora)}${row('concluidoPrazo','Entregues no prazo',conc)}${row('concluidoFora','Entregues fora do prazo',concFora)}${row('concluidosTotal','OTD das entregas',concTotal,pctEnt)}</div>`}
 
-function pendingExecutiveAlerts(rows=FILTERED){let pending=pendingSlaRows(rows),waiting=pending.filter(r=>{let d=slaDates(r);return hasNfd(d)&&!d.collected}),expired=waiting.filter(r=>{let d=slaDates(r),limit=deadlineFrom(d.start,30);return limit&&TODAY>limit});SLA_DETAIL_ROWS.waiting=waiting;SLA_DETAIL_ROWS.expired=expired;let wp=pct1(waiting.length,pending.length),ep=pct1(expired.length,pending.length);return`<section class="pendExecutiveAlerts"><div class="pendAlertsTitle">📌 Alertas para atuação</div><div class="alertGrid"><article class="alertExec wait" onclick="openSlaDetail('waiting','📦 NFDs aguardando coleta')"><div class="alertIcon">📦</div><div class="alertText"><div class="alertTitle">NFDs aguardando coleta</div><div class="alertValue">${pctBR(wp)}</div><div class="alertSub"><b>${fmt(waiting.length)}</b> de <b>${fmt(pending.length)}</b> processos pendentes · NFD emitida e sem coleta</div></div><div class="alertArrow">›</div></article><article class="alertExec danger" onclick="openSlaDetail('expired','🚨 NFDs vencidas para transporte')"><div class="alertIcon">🚨</div><div class="alertText"><div class="alertTitle">NFDs vencidas para transporte</div><div class="alertValue">${fmt(expired.length)} casos</div><div class="alertSub">${pctBR(ep)} dos pendentes · mais de 30 dias desde a reclamação</div></div><div class="alertArrow">›</div></article></div></section>`}
+function pendingExecutiveAlerts(rows=FILTERED){let pending=pendingSlaRows(rows),waiting=pending.filter(r=>{let d=slaDates(r);return hasNfd(d)&&!d.collected}),expired=waiting.filter(managementForaPrazo);SLA_DETAIL_ROWS.waiting=waiting;SLA_DETAIL_ROWS.expired=expired;let wp=pct1(waiting.length,pending.length),ep=pct1(expired.length,pending.length);return`<section class="pendExecutiveAlerts"><div class="pendAlertsTitle">📌 Alertas para atuação</div><div class="alertGrid"><article class="alertExec wait" onclick="openSlaDetail('waiting','📦 NFDs aguardando coleta')"><div class="alertIcon">📦</div><div class="alertText"><div class="alertTitle">NFDs aguardando coleta</div><div class="alertValue">${pctBR(wp)}</div><div class="alertSub"><b>${fmt(waiting.length)}</b> de <b>${fmt(pending.length)}</b> processos pendentes · NFD emitida e sem coleta</div></div><div class="alertArrow">›</div></article><article class="alertExec danger" onclick="openSlaDetail('expired','🚨 NFDs vencidas para transporte')"><div class="alertIcon">🚨</div><div class="alertText"><div class="alertTitle">NFDs vencidas para transporte</div><div class="alertValue">${fmt(expired.length)} casos</div><div class="alertSub">${pctBR(ep)} dos pendentes · Prazo SLA (Transit Time) vencido</div></div><div class="alertArrow">›</div></article></div></section>`}
 
 const pendentesAntesCorrecaoFinal=pendentes;
 pendentes=function(){pendentesAntesCorrecaoFinal();let k=$('page').querySelector('.pendKpis');if(k)k.insertAdjacentHTML('afterend',pendingExecutiveAlerts(FILTERED))}
@@ -780,19 +782,19 @@ applyFilters=function(){
 statusCleanRows=function(type){
  if(type==='total')return FILTERED;
  if(type==='cancelado')return FILTERED.filter(isCanceladoExtravio);
- if(type==='noPrazo')return FILTERED.filter(r=>!isCanceladoExtravio(r)&&managementNoPrazo(r));
- if(type==='foraPrazo')return FILTERED.filter(r=>!isCanceladoExtravio(r)&&managementForaPrazo(r));
- if(type==='concluidoPrazo')return deliveryOnTimeRows(FILTERED.filter(r=>!isCanceladoExtravio(r)));
- if(type==='concluidoFora')return deliveryLateRows(FILTERED.filter(r=>!isCanceladoExtravio(r)));
- if(type==='concluidosTotal')return validDeliveryRows(FILTERED.filter(r=>!isCanceladoExtravio(r)));
+ if(type==='noPrazo')return FILTERED.filter(managementNoPrazo);
+ if(type==='foraPrazo')return FILTERED.filter(managementForaPrazo);
+ if(type==='concluidoPrazo')return deliveryOnTimeRows(FILTERED);
+ if(type==='concluidoFora')return deliveryLateRows(FILTERED);
+ if(type==='concluidosTotal')return validDeliveryRows(FILTERED);
  return FILTERED;
 }
-statusCleanTitle=function(type){return({total:'Total de processos',noPrazo:'Pendente no Prazo',foraPrazo:'Pendente Fora do Prazo',concluidoPrazo:'Concluído no Prazo',concluidoFora:'Concluído Fora do Prazo',cancelado:'Cancelado / Extravio',concluidosTotal:'Todos os concluídos válidos'}[type]||'Detalhamento')}
+statusCleanTitle=function(type){return({total:'Total de processos',noPrazo:'Pendente no Prazo',foraPrazo:'Pendente Fora do Prazo',concluidoPrazo:'Concluído no Prazo',concluidoFora:'Concluído Fora do Prazo',cancelado:'Cancelado / Extravio',concluidosTotal:'Todos os concluídos'}[type]||'Detalhamento')}
 
 headKpis=function(rows=FILTERED){
- let valid=rows.filter(r=>!isCanceladoExtravio(r)),active=valid.filter(isManagementActive),no=active.filter(managementNoPrazo).length,fora=active.filter(managementForaPrazo).length,concPrazo=deliveryOnTimeRows(valid).length,concFora=deliveryLateRows(valid).length,cancelados=rows.filter(isCanceladoExtravio).length,concTotal=concPrazo+concFora,total=rows.length,pctConc=total?pct(concTotal/total*100):'0,0%';
+ let valid=rows,active=valid.filter(isManagementActive),no=active.filter(managementNoPrazo).length,fora=active.filter(managementForaPrazo).length,concPrazo=deliveryOnTimeRows(valid).length,concFora=deliveryLateRows(valid).length,cancelados=rows.filter(isCanceladoExtravio).length,concTotal=concPrazo+concFora,total=rows.length,pctConc=total?pct(concTotal/total*100):'0,0%';
  const click=(type,html)=>`<div onclick="showOverviewStatusDetail('${type}')" style="cursor:pointer">${html}</div>`;
- return`<div class="kpis">${click('total',kpi('Total Processos',fmt(total),'processos no filtro','blue','📦'))}${click('concluidoPrazo',kpi('Concluído no Prazo',fmt(concPrazo),'recebido em até 20 dias','green','✅'))}${click('concluidoFora',kpi('Concluído Fora do Prazo',fmt(concFora),'recebidos após 20 dias','yellow','⚠️'))}${click('noPrazo',kpi('Pendente no Prazo',fmt(no),'pendentes no prazo','green','⏳'))}${click('foraPrazo',kpi('Pendente Fora do Prazo',fmt(fora),'processos pendentes vencidos','red','⏰'))}${click('cancelado',kpi('Cancelado / Extravio',fmt(cancelados),'clique para ver o detalhamento','purple','🚫'))}${click('concluidosTotal',kpi('% Concluídos',pctConc,'total de concluídos: '+fmt(concTotal),'green','📊'))}</div>`;
+ return`<div class="kpis">${click('total',kpi('Total Processos',fmt(total),'processos no filtro','blue','📦'))}${click('concluidoPrazo',kpi('Concluído no Prazo',fmt(concPrazo),'recebido até o Prazo SLA','green','✅'))}${click('concluidoFora',kpi('Concluído Fora do Prazo',fmt(concFora),'recebidos após o Prazo SLA','yellow','⚠️'))}${click('noPrazo',kpi('Pendente no Prazo',fmt(no),'pendentes no prazo','green','⏳'))}${click('foraPrazo',kpi('Pendente Fora do Prazo',fmt(fora),'processos pendentes vencidos','red','⏰'))}${click('cancelado',kpi('Cancelado / Extravio',fmt(cancelados),'já contados nos status ao lado','purple','🚫'))}${click('concluidosTotal',kpi('% Concluídos',pctConc,'total de concluídos: '+fmt(concTotal),'green','📊'))}</div>`;
 }
 
 overviewStatusGraph=function(){
@@ -963,13 +965,13 @@ const _sd=slaDates;
 slaDates=function(r){const d=_sd(r);d.start=past(d.start)?d.start:null;d.nfdDate=past(d.nfdDate)?d.nfdDate:null;d.collected=past(d.collected)?d.collected:null;d.received=past(d.received)?d.received:null;d.scheduled=okD(d.scheduled)?d.scheduled:null;return d};
 
 function calc(rows){
- const P=rows.map(r=>({r,d:slaDates(r)})),dl=x=>deadlineFrom(x.d.start,20);
+ const P=rows.map(r=>({r,d:slaDates(r)})),conc=x=>slaGrupo(x.r)==='CP'||slaGrupo(x.r)==='CF';
  const def=[
-  ['otd','OTD Pontualidade',P.filter(x=>!isCanceladoExtravio(x.r)&&x.d.start&&x.d.received),x=>x.d.received<=dl(x)],
+  ['otd','OTD Pontualidade',P.filter(conc),x=>slaGrupo(x.r)==='CP'],
   ['otp','OTP Coleta',P.filter(x=>x.d.scheduled&&x.d.collected),x=>x.d.collected<=x.d.scheduled],
-  ['final','OTD Entrega Final',P.filter(x=>x.d.start&&x.d.scheduled&&x.d.collected&&x.d.collected<=x.d.scheduled&&x.d.received),x=>x.d.received<=dl(x)]];
- return def.map(([id,t,base,ok])=>{const m=new Map(),ev=base.map(x=>({d:x.d.start||x.d.scheduled,g:ok(x)}));let good=0;
-  ev.forEach(e=>{if(e.g)good++;const k=mk(e.d),z=m.get(k)||{g:0,t:0};z.t++;if(e.g)z.g++;m.set(k,z)});
+  ['final','OTD Entrega Final',P.filter(x=>conc(x)&&x.d.scheduled&&x.d.collected&&x.d.collected<=x.d.scheduled),x=>slaGrupo(x.r)==='CP']];
+ return def.map(([id,t,base,ok])=>{const m=new Map(),ev=base.map(x=>({d:x.d.start||x.d.received||x.d.scheduled,g:ok(x)}));let good=0;
+  ev.forEach(e=>{if(e.g)good++;if(!e.d)return;const k=mk(e.d),z=m.get(k)||{g:0,t:0};z.t++;if(e.g)z.g++;m.set(k,z)});
   const ser=[...m.entries()].sort((a,b)=>a[0]<b[0]?-1:1).filter(([k,e])=>e.t>=3).map(([k,e])=>({k,p:e.g/e.t*100,t:e.t}));
   return{id,t,good,total:base.length,p:pct1(good,base.length),ser,ev}})}
 
@@ -1018,7 +1020,7 @@ function stageCard(st){const mx=Math.max(1,...st.map(s=>s.avg||0)),top=st.reduce
 
 /* Transportadoras */
 function tspStats(rows){const m=new Map();rows.forEach(r=>{const n=norm(r.tsp||'Sem cadastro').toUpperCase(),e=m.get(n)||{n,raw:r.tsp,od:0,og:0,pd:0,pg:0};const d=slaDates(r);
- if(d.start&&d.received){e.od++;if(d.received<=deadlineFrom(d.start,20))e.og++}if(d.scheduled&&d.collected){e.pd++;if(d.collected<=d.scheduled)e.pg++}m.set(n,e)});return[...m.values()]}
+ {const g=slaGrupo(r);if(g==='CP'||g==='CF'){e.od++;if(g==='CP')e.og++}}if(d.scheduled&&d.collected){e.pd++;if(d.collected<=d.scheduled)e.pg++}m.set(n,e)});return[...m.values()]}
 function rankCard(rows){const all=tspStats(rows),st=all.filter(e=>e.od>=5).map(e=>({...e,p:e.og/e.od*100,pp:e.pd?e.pg/e.pd*100:null})).sort((a,b)=>a.p-b.p),out=all.length-st.length;
  return`<div class="card"><div class="hd">🚚 <b>Ranking de transportadoras</b> <span style="text-transform:none;color:var(--muted);font-size:11px">clique para filtrar</span></div><div class="rk h"><span></span><span>marca = meta 96%</span><span>OTD</span><span>OTP</span><span>Entr.</span></div>${st.slice(0,12).map(e=>`<div class="rk" data-k="${esc(e.raw)}" onclick="drill(this.dataset.k)"><b title="${esc(e.n)}">${esc(e.n)}</b><div class="rkT"><div class="rkF" style="width:${e.p}%;background:${metricColor(e.p)}"></div><i class="rkM"></i></div><span style="color:${metricColor(e.p)};font-weight:900">${f1(e.p)}%</span><span>${e.pp==null?'–':f1(e.pp)+'%'}</span><span>${e.od}</span></div>`).join('')||'<div class="gEmpty">Sem transportadoras com 5+ entregas.</div>'}<div class="gNote">Do pior para o melhor OTD · mínimo de 5 entregas${out?` · ${out} fora do ranking por baixo volume`:''}</div></div>`}
 
